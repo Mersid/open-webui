@@ -1245,6 +1245,8 @@ async def generate_chat_completion(
                     part.get('text', '') for part in message['content'] if part.get('type') in ('input_text', 'text')
                 )
 
+    log.debug('FINAL PAYLOAD to %s: %s', request_url, json.dumps(payload, default=str))
+
     payload = json.dumps(payload)
 
     r = None
@@ -1299,6 +1301,16 @@ async def generate_chat_completion(
                 response = await r.text()
 
             if r.status >= 400:
+                if isinstance(payload, (dict, list)):
+                    payload_str = json.dumps(payload, default=str)
+                elif isinstance(payload, str):
+                    try:
+                        payload_str = json.dumps(json.loads(payload), default=str)
+                    except (json.JSONDecodeError, ValueError):
+                        payload_str = payload
+                else:
+                    payload_str = str(payload)
+                log.error('Provider returned HTTP %d (non-SSE): %s', r.status, payload_str)
                 if isinstance(response, (dict, list)):
                     return JSONResponse(status_code=r.status, content=response)
                 else:

@@ -1476,11 +1476,17 @@ async def chat_completion(
             if isinstance(response, JSONResponse) and response.status_code >= 400:
                 try:
                     error_body = json.loads(response.body.decode('utf-8', 'replace'))
+                    if isinstance(error_body, (dict, list)):
+                        error_body_str = json.dumps(error_body, default=str)
+                    else:
+                        error_body_str = str(error_body)
                     detail = error_body.get('error', error_body) if isinstance(error_body, dict) else error_body
                     if isinstance(detail, dict):
                         detail = detail.get('message', detail.get('detail', str(detail)))
                 except Exception:
+                    error_body_str = response.body.decode('utf-8', 'replace') if hasattr(response, 'body') else ''
                     detail = f'Provider returned HTTP {response.status_code}'
+                log.error('Provider returned HTTP %d (response): %s', response.status_code, error_body_str)
                 raise Exception(detail)
 
             ctx = await build_chat_response_context(request, form_data, user, model, metadata, tasks, events)
