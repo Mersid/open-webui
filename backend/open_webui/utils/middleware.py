@@ -4269,11 +4269,27 @@ async def streaming_chat_response_handler(response, ctx):
                                             delta_type = 'content'
 
                                         if reasoning_details:
-                                            reasoning_item.setdefault('reasoning_details', []).extend(
+                                            rd_list = (
                                                 reasoning_details
                                                 if isinstance(reasoning_details, list)
                                                 else [reasoning_details]
                                             )
+                                            rd_store = reasoning_item.setdefault('reasoning_details', [])
+                                            for rd in rd_list:
+                                                idx = rd.get('index', 0)
+                                                existing = next(
+                                                    (e for e in rd_store if e.get('index', 0) == idx),
+                                                    None,
+                                                )
+                                                if existing is None:
+                                                    rd_store.append(dict(rd))
+                                                else:
+                                                    if rd.get('text'):
+                                                        existing['text'] = (existing.get('text', '') or '') + rd['text']
+                                                    if rd.get('signature'):
+                                                        existing['signature'] = rd['signature']
+                                                    existing.setdefault('type', rd.get('type'))
+                                                    existing.setdefault('format', rd.get('format'))
 
                                     if value:
                                         if (

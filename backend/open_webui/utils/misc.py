@@ -220,6 +220,39 @@ def reconcile_tool_pairs(messages: list[dict]) -> list[dict]:
     return reconciled_messages
 
 
+def merge_reasoning_details(reasoning_details):
+    """Fold a (possibly fragmented) reasoning_details list into one entry per index.
+
+    Streaming providers (e.g. Anthropic extended thinking via an OpenAI-compatible
+    proxy) emit one small ``text`` delta per chunk, plus a terminal ``signature``
+    delta, all sharing the same ``index``. Stored verbatim, these deltas form a
+    fragmented list that is invalid as a final/persisted value and is rejected by
+    strict providers on replay. This helper merges deltas that share an index:
+    concatenating ``text`` and setting ``signature`` from the terminal delta.
+    """
+    if not isinstance(reasoning_details, list) or len(reasoning_details) <= 1:
+        return reasoning_details
+
+    merged: dict = {}
+    order: list = []
+    for rd in reasoning_details:
+        if not isinstance(rd, dict):
+            continue
+        idx = rd.get('index', 0)
+        if idx not in merged:
+            merged[idx] = {'index': idx}
+            order.append(idx)
+        slot = merged[idx]
+        if rd.get('text'):
+            slot['text'] = (slot.get('text', '') or '') + rd['text']
+        if rd.get('signature'):
+            slot['signature'] = rd['signature']
+        slot.setdefault('type', rd.get('type'))
+        slot.setdefault('format', rd.get('format'))
+
+    return [merged[i] for i in order]
+
+
 def convert_output_to_messages(
     output: list,
     raw: bool = False,
@@ -368,7 +401,11 @@ def convert_output_to_messages(
 
             if reasoning_details:
                 pending_reasoning_details.extend(
-                    reasoning_details if isinstance(reasoning_details, list) else [reasoning_details]
+                    merge_reasoning_details(
+                        reasoning_details
+                        if isinstance(reasoning_details, list)
+                        else [reasoning_details]
+                    )
                 )
 
         elif item_type == 'open_webui:code_interpreter':
